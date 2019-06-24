@@ -84,7 +84,17 @@ def runStages() {
             archiveArtifacts "app.log"
             archiveArtifacts "README.md"
             archiveArtifacts "htmlcov/*"
-	    archiveArtifacts "junit.xml"
+	        archiveArtifacts "junit.xml"
+
+
+            stage('Sonarqube') {
+                environment {
+                    scannerHome = tool 'sonarqubescanner'
+                }
+                withSonarQubeEnv('sonarqube') {
+                    sh "${scannerHome}/bin/sonar-scanner"
+                }
+            }
         }
     }
 }
