@@ -1,20 +1,18 @@
 #!/usr/bin/env python
 
-import os
-
 from api import api_operation
-from app.auth import (
-    _validate,
-    _pick_identity,
-)
+from api.host import _params_to_order_by, _order_how
 from app.config import Config
-from app.auth.identity import from_dict, from_encoded, from_json, Identity, validate
+from app.auth.identity import (Identity,
+                               validate,
+                               from_auth_header,
+                               from_bearer_token,
+                               SHARED_SECRET_ENV_VAR)
 from base64 import b64encode
 from json import dumps
 from unittest import main, TestCase
 from unittest.mock import Mock, patch
-import pytest
-from werkzeug.exceptions import Forbidden
+from test_utils import set_environment
 
 
 class ApiOperationTestCase(TestCase):
@@ -33,6 +31,7 @@ class ApiOperationTestCase(TestCase):
 
     def test_arguments_are_passed(self):
         old_func = Mock()
+        old_func.__name__ = "old_func"
         new_func = api_operation(old_func)
 
         args = (Mock(),)
@@ -43,6 +42,7 @@ class ApiOperationTestCase(TestCase):
 
     def test_return_value_is_passed(self):
         old_func = Mock()
+        old_func.__name__ = "old_func"
         new_func = api_operation(old_func)
         self.assertEqual(old_func.return_value, new_func())
 
@@ -57,85 +57,7 @@ class AuthIdentityConstructorTestCase(TestCase):
         return Identity(account_number="some number")
 
 
-class AuthIdentityFromDictTest(AuthIdentityConstructorTestCase):
-    """
-    Tests creating an Identity from a dictionary.
-    """
-
-    def test_valid(self):
-        """
-        Initialize the Identity object with a valid dictionary.
-        """
-        identity = self._identity()
-
-        dict_ = {
-            "account_number": identity.account_number,
-            "internal": {"org_id": "some org id", "extra_field": "extra value"},
-        }
-
-        self.assertEqual(identity, from_dict(dict_))
-
-    def test_invalid(self):
-        """
-        Initializing the Identity object with a dictionary with missing values or with
-        anything else should raise TypeError.
-        """
-        dicts = [{}, {"org_id": "some org id"}, "some string", ["some", "list"]]
-        for dict_ in dicts:
-            with self.assertRaises(TypeError):
-                from_dict(dict_)
-
-
-class AuthIdentityFromJsonTest(AuthIdentityConstructorTestCase):
-    """
-    Tests creating an Identity from a JSON string.
-    """
-
-    def test_valid(self):
-        """
-        Initialize the Identity object with a valid JSON string.
-        """
-        identity = self._identity()
-
-        dict_ = {"identity": identity._asdict()}
-        json = dumps(dict_)
-
-        try:
-            self.assertEqual(identity, from_json(json))
-        except (TypeError, ValueError):
-            self.fail()
-
-    def test_invalid_type(self):
-        """
-        Initializing the Identity object with an invalid type that can’t be JSON should
-        raise a TypeError.
-        """
-        with self.assertRaises(TypeError):
-            from_json(["not", "a", "string"])
-
-    def test_invalid_value(self):
-        """
-        Initializing the Identity object with an invalid JSON string should raise a
-        ValueError.
-        """
-        with self.assertRaises(ValueError):
-            from_json("invalid JSON")
-
-    def test_invalid_format(self):
-        """
-        Initializing the Identity object with a JSON string that is not
-        formatted correctly.
-        """
-        identity = self._identity()
-
-        dict_ = identity._asdict()
-        json = dumps(dict_)
-
-        with self.assertRaises(KeyError):
-            from_json(json)
-
-
-class AuthIdentityFromEncodedTest(AuthIdentityConstructorTestCase):
+class AuthIdentityFromAuthHeaderTest(AuthIdentityConstructorTestCase):
     """
     Tests creating an Identity from a Base64 encoded JSON string, which is what is in
     the HTTP header.
@@ -146,16 +68,27 @@ class AuthIdentityFromEncodedTest(AuthIdentityConstructorTestCase):
         Initialize the Identity object with an encoded payload – a base64-encoded JSON.
         That would typically be a raw HTTP header content.
         """
-        identity = self._identity()
+        expected_identity = self._identity()
 
-        dict_ = {"identity": identity._asdict()}
-        json = dumps(dict_)
-        base64 = b64encode(json.encode())
+        identity_data = expected_identity._asdict()
 
-        try:
-            self.assertEqual(identity, from_encoded(base64))
-        except (TypeError, ValueError):
-            self.fail()
+        identity_data_dicts = [identity_data,
+                               # Test with extra data in the identity dict
+                               {**identity_data, **{"extra_data": "value"}}, ]
+
+        for identity_data in identity_data_dicts:
+            with self.subTest(identity_data=identity_data):
+                identity = {"identity": identity_data}
+                json = dumps(identity)
+                base64 = b64encode(json.encode())
+
+                try:
+                    actual_identity = from_auth_header(base64)
+                    self.assertEqual(expected_identity, actual_identity)
+                except (TypeError, ValueError):
+                    self.fail()
+
+                self.assertEqual(actual_identity.is_trusted_system, False)
 
     def test_invalid_type(self):
         """
@@ -163,7 +96,7 @@ class AuthIdentityFromEncodedTest(AuthIdentityConstructorTestCase):
         encoded payload should raise a TypeError.
         """
         with self.assertRaises(TypeError):
-            from_encoded(["not", "a", "string"])
+            from_auth_header(["not", "a", "string"])
 
     def test_invalid_value(self):
         """
@@ -171,7 +104,7 @@ class AuthIdentityFromEncodedTest(AuthIdentityConstructorTestCase):
         raise a ValueError.
         """
         with self.assertRaises(ValueError):
-            from_encoded("invalid Base64")
+            from_auth_header("invalid Base64")
 
     def test_invalid_format(self):
         """
@@ -185,7 +118,7 @@ class AuthIdentityFromEncodedTest(AuthIdentityConstructorTestCase):
         base64 = b64encode(json.encode())
 
         with self.assertRaises(KeyError):
-            from_encoded(base64)
+            from_auth_header(base64)
 
 
 class AuthIdentityValidateTestCase(TestCase):
@@ -198,96 +131,188 @@ class AuthIdentityValidateTestCase(TestCase):
             self.fail()
 
     def test_invalid(self):
-        identities = [
-            Identity(account_number=None),
-            Identity(account_number=""),
-            Identity(account_number=None),
-            Identity(account_number=""),
-        ]
-        for identity in identities:
-            with self.subTest(identity=identity):
+        account_numbers = [None, ""]
+        for account_number in account_numbers:
+            with self.subTest(account_number=account_number):
                 with self.assertRaises(ValueError):
-                    validate(identity)
-
-    def test__validate_identity(self):
-        with self.assertRaises(Forbidden):
-            _validate(None)
-        with self.assertRaises(Forbidden):
-            _validate("")
-        with self.assertRaises(Forbidden):
-            _validate({})
+                    Identity(account_number=account_number)
 
 
-@pytest.mark.usefixtures("monkeypatch")
-def test_noauthmode(monkeypatch):
-    with monkeypatch.context() as m:
-        m.setenv("FLASK_DEBUG", "1")
-        m.setenv("NOAUTH", "1")
-        assert _pick_identity() == Identity(account_number="0000001")
+class TrustedIdentityTestCase(TestCase):
+    shared_secret = "ImaSecret"
+
+    def _build_id(self):
+        identity = from_bearer_token(self.shared_secret)
+        return identity
+
+    def test_validation(self):
+        identity = self._build_id()
+
+        with set_environment({SHARED_SECRET_ENV_VAR: self.shared_secret}):
+            validate(identity)
+
+    def test_validation_with_invalid_identity(self):
+        identity = from_bearer_token("InvalidPassword")
+
+        with self.assertRaises(ValueError):
+            validate(identity)
+
+    def test_validation_env_var_not_set(self):
+        identity = self._build_id()
+
+        with set_environment({}):
+            with self.assertRaises(ValueError):
+                validate(identity)
+
+    def test_validation_token_is_None(self):
+        tokens = [None, ""]
+        for token in tokens:
+            with self.subTest(token_value=token):
+                with self.assertRaises(ValueError):
+                    Identity(token=token)
+
+    def test_is_trusted_system(self):
+        identity = self._build_id()
+
+        self.assertEqual(identity.is_trusted_system, True)
+
+    def test_account_number_is_not_set_for_trusted_system(self):
+        identity = self._build_id()
+
+        self.assertEqual(identity.account_number, None)
 
 
-@pytest.mark.usefixtures("monkeypatch")
-def test_config(monkeypatch):
-    app_name = "brontocrane"
-    path_prefix = "/r/slaterock/platform"
-    expected_base_url = f"{path_prefix}/{app_name}"
-    expected_api_path = f"{expected_base_url}/api/v1"
-    expected_mgmt_url_path_prefix = "/mgmt_testing"
+class ConfigTestCase(TestCase):
 
-    with monkeypatch.context() as m:
-        m.setenv("INVENTORY_DB_USER", "fredflintstone")
-        m.setenv("INVENTORY_DB_PASS", "bedrock1234")
-        m.setenv("INVENTORY_DB_HOST", "localhost")
-        m.setenv("INVENTORY_DB_NAME", "SlateRockAndGravel")
-        m.setenv("INVENTORY_DB_POOL_TIMEOUT", "3")
-        m.setenv("INVENTORY_DB_POOL_SIZE", "8")
-        m.setenv("APP_NAME", app_name)
-        m.setenv("PATH_PREFIX", path_prefix)
-        m.setenv("INVENTORY_MANAGEMENT_URL_PATH_PREFIX", expected_mgmt_url_path_prefix)
+    def test_configuration_with_env_vars(self):
+        app_name = "brontocrane"
+        path_prefix = "r/slaterock/platform"
+        expected_base_url = f"/{path_prefix}/{app_name}"
+        expected_api_path = f"{expected_base_url}/v1"
+        expected_mgmt_url_path_prefix = "/mgmt_testing"
 
-        conf = Config("testing")
+        new_env = {"INVENTORY_DB_USER": "fredflintstone",
+                "INVENTORY_DB_PASS": "bedrock1234",
+                "INVENTORY_DB_HOST": "localhost",
+                "INVENTORY_DB_NAME": "SlateRockAndGravel",
+                "INVENTORY_DB_POOL_TIMEOUT": "3",
+                "INVENTORY_DB_POOL_SIZE": "8",
+                "APP_NAME": app_name,
+                "PATH_PREFIX": path_prefix,
+                "INVENTORY_MANAGEMENT_URL_PATH_PREFIX": expected_mgmt_url_path_prefix, }
 
-        assert conf.db_uri == "postgresql://fredflintstone:bedrock1234@localhost/SlateRockAndGravel"
-        assert conf.db_pool_timeout == 3
-        assert conf.db_pool_size == 8
-        assert conf.api_url_path_prefix == expected_api_path
-        assert conf.mgmt_url_path_prefix == expected_mgmt_url_path_prefix
+        with set_environment(new_env):
 
+            conf = Config()
 
-@pytest.mark.usefixtures("monkeypatch")
-def test_config_default_settings(monkeypatch):
-    expected_base_url = "/r/insights/platform/inventory"
-    expected_api_path = f"{expected_base_url}/api/v1"
-    expected_mgmt_url_path_prefix = "/"
+            self.assertEqual(conf.db_uri, "postgresql://fredflintstone:bedrock1234@localhost/SlateRockAndGravel")
+            self.assertEqual(conf.db_pool_timeout, 3)
+            self.assertEqual(conf.db_pool_size, 8)
+            self.assertEqual(conf.api_url_path_prefix, expected_api_path)
+            self.assertEqual(conf.mgmt_url_path_prefix, expected_mgmt_url_path_prefix)
 
-    with monkeypatch.context() as m:
+    def test_config_default_settings(self):
+        expected_api_path = "/api/inventory/v1"
+        expected_mgmt_url_path_prefix = "/"
+
         # Make sure the environment variables are not set
-        for env_var in ("INVENTORY_DB_USER", "INVENTORY_DB_PASS",
-                        "INVENTORY_DB_HOST", "INVENTORY_DB_NAME",
-                        "INVENTORY_DB_POOL_TIMEOUT", "INVENTORY_DB_POOL_SIZE",
-                        "APP_NAME", "PATH_PREFIX"
-                        "INVENTORY_MANAGEMENT_URL_PATH_PREFIX",):
-            if env_var in os.environ:
-                m.delenv(env_var)
+        with set_environment(None):
 
-        conf = Config("testing")
+            conf = Config()
 
-        assert conf.db_uri == "postgresql://insights:insights@localhost/test_db"
-        assert conf.api_url_path_prefix == expected_api_path
-        assert conf.mgmt_url_path_prefix == expected_mgmt_url_path_prefix
-        assert conf.db_pool_timeout == 5
-        assert conf.db_pool_size == 5
+            self.assertEqual(conf.db_uri, "postgresql://insights:insights@localhost/insights")
+            self.assertEqual(conf.api_url_path_prefix, expected_api_path)
+            self.assertEqual(conf.mgmt_url_path_prefix, expected_mgmt_url_path_prefix)
+            self.assertEqual(conf.db_pool_timeout, 5)
+            self.assertEqual(conf.db_pool_size, 5)
+
+    def test_config_development_settings(self):
+        with set_environment({"INVENTORY_DB_POOL_TIMEOUT": "3"}):
+
+            conf = Config()
+
+            self.assertEqual(conf.db_pool_timeout, 3)
 
 
-@pytest.mark.usefixtures("monkeypatch")
-def test_config_development(monkeypatch):
-    with monkeypatch.context() as m:
-        m.setenv("INVENTORY_DB_POOL_TIMEOUT", "3")
+class HostOrderHowTestCase(TestCase):
 
-        # Test a different "type" (development) of config settings
-        conf = Config("development")
+    def test_asc(self):
+        column = Mock()
+        result = _order_how(column, "ASC")
+        self.assertEqual(result, column.asc())
 
-        assert conf.db_pool_timeout == 3
+    def test_desc(self):
+        column = Mock()
+        result = _order_how(column, "DESC")
+        self.assertEqual(result, column.desc())
+
+    def test_error(self):
+        invalid_values = (None, "asc", "desc", "BBQ")
+        for invalid_value in invalid_values:
+            with self.subTest(order_how=invalid_value):
+                with self.assertRaises(ValueError):
+                    _order_how(Mock(), invalid_value)
+
+
+@patch("api.host._order_how")
+@patch("api.host.Host.modified_on")
+class HostParamsToOrderByTestCase(TestCase):
+
+    def test_default_is_updated_desc(self, modified_on, order_how):
+        actual = _params_to_order_by(None, None)
+        expected = (modified_on.desc.return_value,)
+        self.assertEqual(actual, expected)
+        order_how.assert_not_called()
+
+    def test_default_for_updated_is_desc(self, modified_on, order_how):
+        actual = _params_to_order_by("updated", None)
+        expected = (modified_on.desc.return_value,)
+        self.assertEqual(actual, expected)
+        order_how.assert_not_called()
+
+    def test_order_by_updated_asc(self, modified_on, order_how):
+        actual = _params_to_order_by("updated", "ASC")
+        expected = (order_how.return_value,)
+        self.assertEqual(actual, expected)
+        order_how.assert_called_once_with(modified_on, "ASC")
+
+    def test_order_by_updated_desc(self, modified_on, order_how):
+        actual = _params_to_order_by("updated", "DESC")
+        expected = (order_how.return_value,)
+        self.assertEqual(actual, expected)
+        order_how.assert_called_once_with(modified_on, "DESC")
+
+    @patch("api.host.Host.display_name")
+    def test_default_for_display_name_is_asc(self, display_name, modified_on, order_how):
+        actual = _params_to_order_by("display_name",)
+        expected = (display_name.asc.return_value, modified_on.desc.return_value)
+        self.assertEqual(actual, expected)
+        order_how.assert_not_called()
+
+    @patch("api.host.Host.display_name")
+    def test_order_by_display_name_asc(self, display_name, modified_on, order_how):
+        actual = _params_to_order_by("display_name", "ASC")
+        expected = (order_how.return_value, modified_on.desc.return_value)
+        self.assertEqual(actual, expected)
+        order_how.assert_called_once_with(display_name, "ASC")
+
+    @patch("api.host.Host.display_name")
+    def test_order_by_display_name_desc(self, display_name, modified_on, order_how):
+        actual = _params_to_order_by("display_name", "DESC")
+        expected = (order_how.return_value, modified_on.desc.return_value)
+        self.assertEqual(actual, expected)
+        order_how.assert_called_once_with(display_name, "DESC")
+
+
+class HostParamsToOrderByErrorsTestCase(TestCase):
+
+    def test_order_by_bad_field_raises_error(self):
+        with self.assertRaises(ValueError):
+            _params_to_order_by(Mock(), "fqdn")
+
+    def test_order_by_only_how_raises_error(self):
+        with self.assertRaises(ValueError):
+            _params_to_order_by(Mock(), order_how="ASC")
 
 
 if __name__ == "__main__":

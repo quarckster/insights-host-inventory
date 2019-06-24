@@ -24,6 +24,18 @@ useful for development.
 docker-compose -f dev.yml up
 ```
 
+#### Initialize/update the database tables
+
+Run the following commands to run the db migration scripts which will
+maintain the db tables.
+
+The database migration scripts determine the DB location, username,
+password and db name from the INVENTORY_DB_HOST, INVENTORY_DB_USER,
+INVENTORY_DB_PASS and INVENTORY_DB_NAME environment variables.
+```
+python manage.py db upgrade
+```
+
 By default the database container will use a bit of local storage so that data
 you enter will be persisted across multiple starts of the container.  If you
 want to destroy that data do the following:
@@ -34,12 +46,23 @@ docker-compose down
 
 ## Running the Tests
 
-Running the tests is quite simple:
+It is possible to run the tests using pytest:
+
+```
+pytest --cov=.
+```
+
+Or you can run the tests individually:
 
 ```
 ./test_api.py
+pytest test_db_model.py
 ./test_unit.py
+pytest test_json_validators.py
 ```
+
+Depending on the environment, it might be necessary to set the DB related environment
+variables (INVENTORY_DB_NAME, INVENTORY_DB_HOST, etc).
 
 ## Running the server
 
@@ -58,7 +81,7 @@ runs.
 A command to run the server in a cluster.
 
 ```
-gunicorn -c gunicorn.conf.py run
+gunicorn -c gunicorn.conf.py --log-config=$INVENTORY_LOGGING_CONFIG_FILE run
 ```
 
 Running the server locally for development. In this case it’s not necessary to
@@ -69,7 +92,8 @@ _prometheus_multiproc_dir_ environment variable. This is done automatically.
 python run_gunicorn.py 
 ```
 
-Configuration system properties:
+
+## Configuration environment variables
 
 ```
  prometheus_multiproc_dir=/path/to/prometheus_dir
@@ -78,10 +102,23 @@ Configuration system properties:
  INVENTORY_DB_USER="insights"
  INVENTORY_DB_PASS="insights"
  INVENTORY_DB_HOST="localhost"
- INVENTORY_DB_NAME="test_db"
+ INVENTORY_DB_NAME="insights"
  INVENTORY_DB_POOL_TIMEOUT="5"
  INVENTORY_DB_POOL_SIZE="5"
+ INVENTORY_LOGGING_CONFIG_FILE=logconf.ini
+ INVENTORY_DB_SSL_MODE=""
+ INVENTORY_DB_SSL_CERT=""
 ```
+
+To force an ssl connection to the db set INVENTORY_DB_SSL_MODE to "verify-full"
+and provide the path to the certificate you'd like to use.
+
+## Using the legacy api
+
+```
+ export INVENTORY_LEGACY_API_URL="/r/insights/platform/inventory/api/v1"
+```
+
 
 ## Deployment
 
@@ -93,6 +130,8 @@ from inside of the deployment cluster.
   or readiness probe here.
 * _/metrics_ offers metrics and monitoring intended to be pulled by
   [Prometheus](https://prometheus.io). 
+* _/version_ responds with a json doc that contains the build version info
+  (the value of the OPENSHIFT_BUILD_COMMIT environment variable)
 
 ## API Documentation
 
@@ -115,27 +154,57 @@ The canonical facts are:
 * ip_addresses
 * fqdn
 * mac_addresses
+* external_id
 
 Hosts are added and updated by sending a POST to the /hosts endpoint.
 (See the API Documentation for more details on the POST method).
 This method returns an *id* which should be used to reference the host
 by other services in the Insights platform.
 
-Overview of the deduplication process:
+#### Overview of the deduplication process
+
+If the update request includes an insights_id, then the inventory service
+will lookup the host using the insights_id.  If the inventory service
+finds a host with a matching insights_id, then the host will be updated
+and the canonical facts from the update request will replace the existing
+canonical facts.
+
+If the update request does not include an insights_id, then the canonical facts
+will be used to lookup the host.  If the canonical facts from the update
+request are a subset or a superset of the previously stored canonical facts,
+then the host will be updated and any new canonical facts from the request
+will be added to the existing host entry.
+
+If the canonical facts based lookup does not locate an existing host, then
+a new host entry is created.
+
+#### Host deletion
+
+Hosts can be deleted by using the DELETE HTTP Method on the _/hosts/id_ endpoint.
+When a host is deleted, the inventory service will send an event message
+to the _platform.inventory.events_ message queue.  The delete event message
+will look like the following:
+
+```json
+  {"id": <host id>, "timestamp": <delete timestamp>, "type": "delete"}
+```
+
+  - type: type of host change (delete in this case)
+  - id: Inventory host id of the host that was deleted
+  - timestamp: the time at which the host was deleted
+
+#### Testing API Calls
+
+It is necessary to pass an authentication header along on each call to the
+service.  For testing purposes, it is possible to set the required identity
+header to the following:
 
 ```
-  If the update request includes an insights_id, then the inventory service
-  will lookup the host using the insights_id.  If the inventory service
-  finds a host with a matching insights_id, then the host will be updated
-  and the canonical facts from the update request will replace the existing
-  canonical facts.
+x-rh-identity: eyJpZGVudGl0eSI6IHsiYWNjb3VudF9udW1iZXIiOiAiMDAwMDAwMSIsICJpbnRlcm5hbCI6IHsib3JnX2lkIjogIjAwMDAwMSJ9fX0=
+```
 
-  If the update request does not include an insights_id, then the canonical facts
-  will be used to lookup the host.  If the canonical facts from the update
-  request are a subset or a superset of the previously stored canonical facts,
-  then the host will be updated and any new canonical facts from the request
-  will be added to the existing host entry.
+This is the Base64 encoding of the following JSON document:
 
-  If the canonical facts based lookup does not locate an existing host, then
-  a new host entry is created.
+```json
+{"identity": {"account_number": "0000001", "internal": {"org_id": "000001"}}}
 ```

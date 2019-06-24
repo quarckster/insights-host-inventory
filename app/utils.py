@@ -2,8 +2,8 @@ import json
 
 
 class HostWrapper:
-    def __init__(self, data={}):
-        self.__data = data
+    def __init__(self, data=None):
+        self.__data = data or {}
 
     def data(self):
         return self.__data
@@ -79,20 +79,20 @@ class HostWrapper:
         self.__data["mac_addresses"] = cf
 
     @property
+    def external_id(self):
+        return self.__data.get("external_id")
+
+    @external_id.setter
+    def external_id(self, cf):
+        self.__data["external_id"] = cf
+
+    @property
     def facts(self):
         return self.__data.get("facts", None)
 
     @facts.setter
     def facts(self, facts):
         self.__data["facts"] = facts
-
-    @property
-    def tags(self):
-        return self.__data.get("tags", None)
-
-    @tags.setter
-    def tags(self, tags):
-        self.__data["tags"] = tags
 
     @property
     def id(self):
@@ -117,6 +117,14 @@ class HostWrapper:
     @display_name.setter
     def display_name(self, display_name):
         self.__data["display_name"] = display_name
+
+    @property
+    def ansible_host(self):
+        return self.__data.get("ansible_host", None)
+
+    @ansible_host.setter
+    def ansible_host(self, ansible_host):
+        self.__data["ansible_host"] = ansible_host
 
     def to_json(self):
         return json.dumps(self.__data)

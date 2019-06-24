@@ -20,6 +20,14 @@ gunicorn = "*"
 connexion = {extras = ["swagger-ui"]}
 pyyaml = ">=3.13"
 prometheus-client = "*"
+logstash-formatter = "*"
+pytest = "*"
+validators = "*"
+marshmallow = "*"
+ujson = "*"
+watchtower = "*"
+"boto3" = "*"
+kafka = "*"
 
 [dev-packages]
 pytest = "*"
