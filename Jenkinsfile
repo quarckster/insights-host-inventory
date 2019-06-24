@@ -74,25 +74,33 @@ def runStages() {
                 withStatusContext.unitTest {
                     sh "${pipelineVars.userPath}/pipenv run pytest --cov=. --junitxml=junit.xml --cov-report html -s -v"
                     junit '*.xml'
+                    archiveArtifacts "junit.xml"
                 }
             }
 
             stage('Code coverage') {
                 checkCoverage(threshold: codecovThreshold)
+                archiveArtifacts "htmlcov/*"
             }
 
             archiveArtifacts "app.log"
             archiveArtifacts "README.md"
-            archiveArtifacts "htmlcov/*"
-	        archiveArtifacts "junit.xml"
 
-
-            stage('Sonarqube') {
+            stage('SonarQube analysis') {
                 environment {
                     scannerHome = tool 'sonarqubescanner'
                 }
+
                 withSonarQubeEnv('sonarqube') {
-                    sh "${scannerHome}/bin/sonar-scanner"
+                  sh '${scannerHome}/bin/sonar-scanner' +
+                  '-Dsonar.projectKey=insights-host-inventory ' +
+                  '-Dsonar.language=py ' +
+                  '-Dsonar.sources=. ' +
+                  '-Dsonar.python.xunit.reportPath=junit.xml ' +
+                  '-Dsonar.tests=. ' +
+                  '-Dsonar.python.coverage.reportPath=coverage.xml' +
+                  '-Dsonar.test.inclusions=**/*Test*/** ' +
+                  '-Dsonar.exclusions=**/*Test*/**'
                 }
             }
         }
