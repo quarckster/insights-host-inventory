@@ -24,7 +24,7 @@ node {
 def runStages() {
 
     // Fire up a pod on openshift with containers for the DB and the app
-    podTemplate(label: podLabel, slaveConnectTimeout: 120, cloud: 'openshift', containers: [
+    podTemplate(label: podLabel, slaveConnectTimeout: 120, cloud: 'upshift', containers: [
         containerTemplate(
             name: 'jnlp',
             image: 'http://registry.access.redhat.com/openshift3/jenkins-agent-nodejs-8-rhel7',
