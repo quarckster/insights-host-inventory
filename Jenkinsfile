@@ -28,11 +28,11 @@ def sonar(){
             curl --insecure -o ./sonarscanner.zip -L https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-3.3.0.1492-linux.zip && \
 	        unzip sonarscanner.zip && \
 	        rm sonarscanner.zip && \
-	        mv sonar-scanner-3.3.0.1492-linux /usr/lib/sonar-scanner && \
-	        ln -s /usr/lib/sonar-scanner/bin/sonar-scanner /usr/local/bin/sonar-scanner
+	        mv sonar-scanner-3.3.0.1492-linux sonar-scanner && \
+	        sh sonar-scanner/bin/sonar-scanner --help
         """
 
-       def scannerHome = tool 'sonar_scanner';
+       def scannerHome = 'sonar-scanner';
         withSonarQubeEnv('sonar-insights-dev') {
           sh '${scannerHome}/bin/sonar-scanner ' +
           '-Dsonar.projectKey=insights-host-inventory ' +
