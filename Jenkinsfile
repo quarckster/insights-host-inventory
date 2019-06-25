@@ -15,15 +15,23 @@ venvDir = "venv"
 node {
     cancelPriorBuilds()
 
+    sonar()
+
     runIfMasterOrPullReq {
         runStages()
     }
-
-    sonar()
 }
 
 def sonar(){
     stage('sonar scanner'){
+        sh """
+            curl --insecure -o ./sonarscanner.zip -L https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-3.3.0.1492-linux.zip && \
+	        unzip sonarscanner.zip && \
+	        rm sonarscanner.zip && \
+	        mv sonar-scanner-3.3.0.1492-linux /usr/lib/sonar-scanner && \
+	        ln -s /usr/lib/sonar-scanner/bin/sonar-scanner /usr/local/bin/sonar-scanner
+        """
+
        def scannerHome = tool 'sonar_scanner';
         withSonarQubeEnv('sonar-insights-dev') {
           sh '${scannerHome}/bin/sonar-scanner ' +
@@ -67,6 +75,8 @@ def runStages() {
 
         node(podLabel) {
 
+            sonar()
+            
             // check out source again to get it in this node's workspace
             scmVars = checkout scm
 
@@ -88,7 +98,8 @@ def runStages() {
             stage('Unit tests') {
                 withStatusContext.unitTest {
                     sh "${pipelineVars.userPath}/pipenv run pytest --cov=. --junitxml=junit.xml --cov-report html -s -v"
-                    junit '*.xml'
+                    junit 'junit.xml'
+                    stash 'junit.xml'
                     archiveArtifacts "*.xml"
                 }
             }
@@ -107,9 +118,11 @@ def runStages() {
             stage('sonarqube test') {
                 def scannerHome = tool 'sonar_scanner';
                 withSonarQubeEnv('sonar-insights-dev') {
+                    unstash 'junit.xml'
                     sh '${scannerHome}/bin/sonar-scanner ' +
                     '-Dsonar.projectKey=insights-host-inventory ' +
-                    '-Dsonar.language=py '
+                    '-Dsonar.language=py ' +
+                    '-Dsonar.python.xunit.reportPath=junit.xml'
                 }
             }
         }
