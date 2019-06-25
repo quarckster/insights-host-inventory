@@ -32,9 +32,11 @@ def get_sonar_cli(){
 def sonar_scanner(){
     stage('sonar scanner'){
         get_sonar_cli()
-        sh "ls -laht"
-        withCredentials([string(credentialsId: 'jenkins-sonarqube', variable: 'TOKEN')]) {
+        withCredentials([
+            string(credentialsId: 'jenkins-sonarqube', variable: 'TOKEN'),
+            string(credentialsId: 'sonarqube-url-dev', variable: 'SONAR_URL')]) {
             sh 'sonar-scanner/bin/sonar-scanner ' +
+            '-Dsonar.host.url=${SONAR_URL}' +
             '-Dsonar.projectKey=insights-host-inventory ' +
             '-Dsonar.language=py ' +
             '-Dsonar.sources=. ' +
