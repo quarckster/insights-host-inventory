@@ -87,10 +87,8 @@ def runStages() {
             archiveArtifacts "README.md"
 
             stage('SonarQube analysis') {
-                def scannerHome = tool 'sonar_scanner';
-
                 withSonarQubeEnv('sonar-insights-dev') {
-                  sh '${scannerHome}/bin/sonar-scanner ' +
+                  sh '/var/lib/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/sonar_scanner/bin/sonar-scanner ' +
                   '-Dsonar.projectKey=insights-host-inventory ' +
                   '-Dsonar.language=py ' +
                   '-Dsonar.sources=. ' +
