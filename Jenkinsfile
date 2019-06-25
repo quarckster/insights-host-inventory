@@ -23,10 +23,10 @@ node {
 def sonar(){
     stage('sonar scanner'){
         sh """
-            curl --insecure -o ./sonarscanner.zip -L https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-3.3.0.1492-linux.zip && \
+            curl --insecure -o ./sonarscanner.zip -L https://repo1.maven.org/maven2/org/sonarsource/scanner/cli/sonar-scanner-cli/3.3.0.1492/sonar-scanner-cli-3.3.0.1492.zip && \
 	        unzip sonarscanner.zip && \
 	        rm sonarscanner.zip && \
-	        mv sonar-scanner-3.3.0.1492-linux sonar-scanner && \
+	        mv sonar-scanner-3.3.0.1492 sonar-scanner && \
 	        sh sonar-scanner/bin/sonar-scanner --help
         """
 
