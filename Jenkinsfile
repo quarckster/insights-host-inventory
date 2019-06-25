@@ -51,14 +51,18 @@ def runStages() {
             resourceLimitMemory: '100Mi'
         )
     ]) {
-        node(podLabel) {
 
-            stage('SonarQube analysis') {
-                withSonarQubeEnv('sonar-insights-dev') {
-                  sh 'pwd'
-                }
-                sh 'exit 1'
-            }
+
+    node {
+      stage('sonarqube scanner') {
+        def scannerHome = tool 'sonar_scanner';
+        withSonarQubeEnv('sonar-insights-dev') {
+          sh "${scannerHome}/bin/sonar-scanner"
+        }
+      }
+    }
+
+    node(podLabel) {
 
             // check out source again to get it in this node's workspace
             scmVars = checkout scm
