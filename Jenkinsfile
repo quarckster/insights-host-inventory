@@ -25,8 +25,7 @@ def get_sonar_cli(){
             curl --insecure -o ./sonarscanner.zip -L https://repo1.maven.org/maven2/org/sonarsource/scanner/cli/sonar-scanner-cli/3.3.0.1492/sonar-scanner-cli-3.3.0.1492.zip && \
 	        unzip sonarscanner.zip && \
 	        rm sonarscanner.zip && \
-	        mv sonar-scanner-3.3.0.1492 sonar-scanner && \
-	        sh sonar-scanner/bin/sonar-scanner --help
+	        mv sonar-scanner-3.3.0.1492 sonar-scanner
         """
 }
 
@@ -34,7 +33,7 @@ def sonar_scanner(){
     stage('sonar scanner'){
         get_sonar_cli()
         sh "ls -laht"
-        withCredentials([string(credentialsId: envConfig['jenkins-sonarqube'], variable: 'TOKEN')]) {
+        withCredentials([string(credentialsId: 'jenkins-sonarqube', variable: 'TOKEN')]) {
             sh 'sonar-scanner/bin/sonar-scanner ' +
             '-Dsonar.projectKey=insights-host-inventory ' +
             '-Dsonar.language=py ' +
