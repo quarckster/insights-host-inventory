@@ -55,8 +55,9 @@ def runStages() {
 
             stage('SonarQube analysis') {
                 withSonarQubeEnv('sonar-insights-dev') {
-                  sh '/var/lib/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/sonar_scanner/bin/sonar-scanner --help'
+                  sh 'pwd'
                 }
+                sh 'exit 1'
             }
 
             // check out source again to get it in this node's workspace
