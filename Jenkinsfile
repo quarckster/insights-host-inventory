@@ -40,6 +40,15 @@ def sonar_scanner(){
             '-Dsonar.projectKey=insights-host-inventory ' +
             '-Dsonar.language=py ' +
             '-Dsonar.sources=. ' +
+            '-Dsonar.projectDescription=Host inventory project ' +
+            '-Dsonar.links.ci=https://jenkins-jenkins.5a9f.insights-dev.openshiftapps.com/view/QE/job/qe/job/CI-inventory-sonarqube/view/change-requests/ ' +
+            '-Dsonar.links.issue=https://projects.engineering.redhat.com/secure/RapidBoard.jspa?rapidView=2784&projectKey=RHCLOUD ' +
+            '-Dsonar.links.scm=https://github.com/RedHatInsights/insights-host-inventory ' +
+            '-Dsonar.sourceEncoding=UTF-8 ' +
+            '-Dsonar.python.xunit.reportPath=junit.xml ' +
+            '-Dsonar.python.coverage.reportPath=coverage.xml ' +
+            '-Dsonar.exclusions=**/.pytest_cache/*, ' +
+            '-Dsonar.coverage.exclusions=**/tests/*,**/tests/app/*,**/tests/fixtures/*,**/docker/consumer/*,**/tests/fixtures/*,**/sonar-scanner/* ' +
             '-Dsonar.login=${TOKEN} ' +
             '-Dsonar.password= '
         }
@@ -99,7 +108,7 @@ def runStages() {
 
             stage('Unit tests') {
                 withStatusContext.unitTest {
-                    sh "${pipelineVars.userPath}/pipenv run pytest --cov=. --junitxml=junit.xml --cov-report html -s -v"
+                    sh "${pipelineVars.userPath}/pipenv run pytest --cov=. --junitxml=junit.xml --cov-report xml -s -v"
                     junit 'junit.xml'
                     archiveArtifacts "*.xml"
                 }
