@@ -36,7 +36,7 @@ def sonar_scanner(){
             string(credentialsId: 'jenkins-sonarqube', variable: 'TOKEN'),
             string(credentialsId: 'sonarqube-url-dev', variable: 'SONAR_URL')]) {
             sh 'sonar-scanner/bin/sonar-scanner ' +
-            '-Dsonar.host.url=${SONAR_URL}' +
+            '-Dsonar.host.url=${SONAR_URL} ' +
             '-Dsonar.projectKey=insights-host-inventory ' +
             '-Dsonar.language=py ' +
             '-Dsonar.sources=. ' +
