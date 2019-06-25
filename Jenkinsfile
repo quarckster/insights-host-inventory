@@ -74,7 +74,7 @@ def runStages() {
                 withStatusContext.unitTest {
                     sh "${pipelineVars.userPath}/pipenv run pytest --cov=. --junitxml=junit.xml --cov-report html -s -v"
                     junit '*.xml'
-                    archiveArtifacts "junit.xml"
+                    archiveArtifacts "*.xml"
                 }
             }
 
@@ -92,7 +92,7 @@ def runStages() {
                 }
 
                 withSonarQubeEnv('sonarqube') {
-                  sh '${scannerHome}/bin/sonar-scanner' +
+                  sh '${scannerHome}/bin/sonar-scanner ' +
                   '-Dsonar.projectKey=insights-host-inventory ' +
                   '-Dsonar.language=py ' +
                   '-Dsonar.sources=. ' +
