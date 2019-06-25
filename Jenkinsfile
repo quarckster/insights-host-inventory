@@ -57,6 +57,7 @@ def runStages() {
                 withSonarQubeEnv('sonar-insights-dev') {
                   sh '/var/lib/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/sonar_scanner/bin/sonar-scanner --help'
                 }
+            }
 
             // check out source again to get it in this node's workspace
             scmVars = checkout scm
@@ -92,19 +93,6 @@ def runStages() {
             archiveArtifacts "app.log"
             archiveArtifacts "README.md"
 
-            stage('SonarQube analysis') {
-                withSonarQubeEnv('sonar-insights-dev') {
-                  sh '/var/lib/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/sonar_scanner/bin/sonar-scanner ' +
-                  '-Dsonar.projectKey=insights-host-inventory ' +
-                  '-Dsonar.language=py ' +
-                  '-Dsonar.sources=. ' +
-                  '-Dsonar.python.xunit.reportPath=junit.xml ' +
-                  '-Dsonar.tests=. ' +
-                  '-Dsonar.python.coverage.reportPath=coverage.xml ' +
-                  '-Dsonar.test.inclusions=**/*Test*/** ' +
-                  '-Dsonar.exclusions=**/*Test*/**'
-                }
-            }
         }
     }
 }
