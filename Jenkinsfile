@@ -65,8 +65,7 @@ def runStages() {
         )
     ]) {
 
-
-    node(podLabel) {
+        node(podLabel) {
 
             // check out source again to get it in this node's workspace
             scmVars = checkout scm
@@ -103,5 +102,17 @@ def runStages() {
             archiveArtifacts "README.md"
 
         }
+
+        node {
+            stage('sonarqube test') {
+                def scannerHome = tool 'sonar_scanner';
+                withSonarQubeEnv('sonar-insights-dev') {
+                    sh '${scannerHome}/bin/sonar-scanner ' +
+                    '-Dsonar.projectKey=insights-host-inventory ' +
+                    '-Dsonar.language=py '
+                }
+            }
+        }
+    
     }
 }
