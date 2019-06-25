@@ -18,8 +18,21 @@ node {
     runIfMasterOrPullReq {
         runStages()
     }
+
+    sonar()
 }
 
+def sonar(){
+    stage('sonar scanner'){
+       def scannerHome = tool 'sonar_scanner';
+        withSonarQubeEnv('sonar-insights-dev') {
+          sh '${scannerHome}/bin/sonar-scanner ' +
+          '-Dsonar.projectKey=insights-host-inventory ' +
+          '-Dsonar.language=py ' +
+          '-Dsonar.sources=. '
+        }
+    }
+}
 
 def runStages() {
 
@@ -52,15 +65,6 @@ def runStages() {
         )
     ]) {
 
-
-    node {
-      stage('sonarqube scanner') {
-        def scannerHome = tool 'sonar_scanner';
-        withSonarQubeEnv('sonar-insights-dev') {
-          sh "${scannerHome}/bin/sonar-scanner"
-        }
-      }
-    }
 
     node(podLabel) {
 
