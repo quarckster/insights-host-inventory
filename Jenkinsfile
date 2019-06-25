@@ -34,13 +34,13 @@ def sonar_scanner(){
     stage('sonar scanner'){
         get_sonar_cli()
         sh "ls -laht"
-        unstash 'junit.xml'
-        def scannerHome = 'sonar-scanner';
-        withSonarQubeEnv('sonar-insights-dev') {
-          sh '${scannerHome}/bin/sonar-scanner ' +
-          '-Dsonar.projectKey=insights-host-inventory ' +
-          '-Dsonar.language=py ' +
-          '-Dsonar.sources=. '
+        withCredentials([string(credentialsId: envConfig['jenkins-sonarqube'], variable: 'TOKEN')]) {
+            sh 'sonar-scanner/bin/sonar-scanner ' +
+            '-Dsonar.projectKey=insights-host-inventory ' +
+            '-Dsonar.language=py ' +
+            '-Dsonar.sources=. ' +
+            '-Dsonar.login=${TOKEN} ' +
+            '-Dsonar.password= '
         }
     }
 }
@@ -100,14 +100,12 @@ def runStages() {
                 withStatusContext.unitTest {
                     sh "${pipelineVars.userPath}/pipenv run pytest --cov=. --junitxml=junit.xml --cov-report html -s -v"
                     junit 'junit.xml'
-                    stash 'junit.xml'
                     archiveArtifacts "*.xml"
                 }
             }
 
             stage('Code coverage') {
                 checkCoverage(threshold: codecovThreshold)
-                archiveArtifacts "htmlcov/*"
             }
 
             archiveArtifacts "app.log"
