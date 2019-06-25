@@ -20,8 +20,7 @@ node {
     }
 }
 
-def sonar(){
-    stage('sonar scanner'){
+def get_sonar_cli(){
         sh """
             curl --insecure -o ./sonarscanner.zip -L https://repo1.maven.org/maven2/org/sonarsource/scanner/cli/sonar-scanner-cli/3.3.0.1492/sonar-scanner-cli-3.3.0.1492.zip && \
 	        unzip sonarscanner.zip && \
@@ -29,8 +28,14 @@ def sonar(){
 	        mv sonar-scanner-3.3.0.1492 sonar-scanner && \
 	        sh sonar-scanner/bin/sonar-scanner --help
         """
+}
 
-       def scannerHome = 'sonar-scanner';
+def sonar_scanner(){
+    stage('sonar scanner'){
+        get_sonar_cli()
+        sh "ls -laht"
+        unstash 'junit.xml'
+        def scannerHome = 'sonar-scanner';
         withSonarQubeEnv('sonar-insights-dev') {
           sh '${scannerHome}/bin/sonar-scanner ' +
           '-Dsonar.projectKey=insights-host-inventory ' +
@@ -72,9 +77,7 @@ def runStages() {
     ]) {
 
         node(podLabel) {
-
-            sonar()
-            
+          
             // check out source again to get it in this node's workspace
             scmVars = checkout scm
 
@@ -110,20 +113,7 @@ def runStages() {
             archiveArtifacts "app.log"
             archiveArtifacts "README.md"
 
-        }
-
-        node {
-            stage('sonarqube test') {
-                def scannerHome = tool 'sonar_scanner';
-                withSonarQubeEnv('sonar-insights-dev') {
-                    unstash 'junit.xml'
-                    sh '${scannerHome}/bin/sonar-scanner ' +
-                    '-Dsonar.projectKey=insights-host-inventory ' +
-                    '-Dsonar.language=py ' +
-                    '-Dsonar.python.xunit.reportPath=junit.xml'
-                }
-            }
-        }
-    
+            sonar_scanner()
+        }    
     }
 }
