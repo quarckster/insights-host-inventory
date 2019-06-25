@@ -15,8 +15,6 @@ venvDir = "venv"
 node {
     cancelPriorBuilds()
 
-    sonar()
-
     runIfMasterOrPullReq {
         runStages()
     }
