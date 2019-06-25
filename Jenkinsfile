@@ -43,7 +43,6 @@ def sonar_scanner(){
             '-Dsonar.projectDescription=Host inventory project ' +
             '-Dsonar.links.ci=https://jenkins-jenkins.5a9f.insights-dev.openshiftapps.com/view/QE/job/qe/job/CI-inventory-sonarqube/view/change-requests/ ' +
             '-Dsonar.links.issue=https://projects.engineering.redhat.com/secure/RapidBoard.jspa?rapidView=2784&projectKey=RHCLOUD ' +
-            '-Dsonar.sourceEncoding=UTF-8 ' +
             '-Dsonar.python.xunit.reportPath=junit.xml ' +
             '-Dsonar.python.coverage.reportPath=coverage.xml ' +
             '-Dsonar.exclusions=**/.pytest_cache/*, ' +
