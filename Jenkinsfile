@@ -24,10 +24,10 @@ node {
 def runStages() {
 
     // Fire up a pod on openshift with containers for the DB and the app
-    podTemplate(label: podLabel, slaveConnectTimeout: 120, cloud: 'openshift', containers: [
+    podTemplate(label: podLabel, slaveConnectTimeout: 120, cloud: 'upshift', containers: [
         containerTemplate(
             name: 'jnlp',
-            image: 'http://registry.access.redhat.com/openshift3/jenkins-agent-nodejs-8-rhel7',
+            image: 'registry.access.redhat.com/openshift3/jenkins-agent-nodejs-8-rhel7',
             args: '${computer.jnlpmac} ${computer.name}',
             resourceRequestCpu: '200m',
             resourceLimitCpu: '500m',
@@ -36,7 +36,7 @@ def runStages() {
         ),
         containerTemplate(
             name: 'postgres',
-            image: 'postgres:9.6',
+            image: 'registry.access.redhat.com/rhscl/postgresql-96-rhel7',
             ttyEnabled: true,
             envVars: [
                 containerEnvVar(key: 'POSTGRES_USER', value: 'insights'),
@@ -70,11 +70,9 @@ def runStages() {
                 runPythonLintCheck()
             }
 
-            stage('Unit tests') {
-                withStatusContext.unitTest {
-                    sh "${pipelineVars.userPath}/pipenv run pytest --cov=. --junitxml=junit.xml --cov-report html -s -v"
-                    junit '*.xml'
-                }
+            stageWithContext('Unit_tests') {
+                sh "${pipelineVars.userPath}/pipenv run pytest --cov=. --junitxml=junit.xml --cov-report html -s -v"
+                junit '*.xml'
             }
 
             stage('Code coverage') {
