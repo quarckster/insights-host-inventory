@@ -4,17 +4,11 @@
 
 @Library("github.com/RedHatInsights/insights-pipeline-lib") _
 
-// Name for auto-generated openshift pod
-podLabel = "host-inventory-test-${UUID.randomUUID().toString()}"
+podLabel = UUID.randomUUID().toString()
 
-// Code coverage failure threshold
-codecovThreshold = 80
-
-venvDir = "venv"
 
 node {
     cancelPriorBuilds()
-
     runIfMasterOrPullReq {
         runStages()
     }
@@ -22,17 +16,26 @@ node {
 
 
 def runStages() {
-
     // Fire up a pod on openshift with containers for the DB and the app
     podTemplate(label: podLabel, slaveConnectTimeout: 120, cloud: 'openshift', containers: [
         containerTemplate(
             name: 'jnlp',
-            image: 'http://registry.access.redhat.com/openshift3/jenkins-agent-nodejs-8-rhel7',
+            image: 'registry.access.redhat.com/openshift3/jenkins-agent-nodejs-8-rhel7',
             args: '${computer.jnlpmac} ${computer.name}',
             resourceRequestCpu: '200m',
             resourceLimitCpu: '500m',
             resourceRequestMemory: '256Mi',
             resourceLimitMemory: '650Mi'
+        ),
+        containerTemplate(
+            name: 'python3',
+            image: 'python:3.6.5',
+            ttyEnabled: true,
+            command: 'cat',
+            resourceRequestCpu: '300m',
+            resourceLimitCpu: '1000m',
+            resourceRequestMemory: '512Mi',
+            resourceLimitMemory: '1Gi'
         ),
         containerTemplate(
             name: 'postgres',
@@ -52,38 +55,38 @@ def runStages() {
         )
     ]) {
         node(podLabel) {
-            // check out source again to get it in this node's workspace
-            scmVars = checkout scm
-
-            stage('Setting up virtual environment') {
-                runPipenvInstall(scmVars: scmVars)
-            }
-
-            stage('Start app') {
-                sh """
-                    ${pipelineVars.userPath}/pipenv run python ./manage.py db upgrade
-                    ${pipelineVars.userPath}/pipenv run python ./run.py > app.log 2>&1 &
-                """
-            }
-
-            stage('Lint') {
-                runPythonLintCheck()
-            }
-
-            stage('Unit tests') {
-                withStatusContext.unitTest {
-                    sh "${pipelineVars.userPath}/pipenv run pytest --cov=. --junitxml=junit.xml --cov-report html -s -v"
-                    junit '*.xml'
+            container("python3") {
+                stage('Setting up environment') {
+                    withStatusContext.custom('setup') {
+                        scmVars = checkout scm
+                        runPipenvInstall(scmVars: scmVars)
+                        sh "${pipelineVars.userPath}/pipenv run python manage.py db upgrade"
+                    }
                 }
-            }
 
-            stage('Code coverage') {
-                checkCoverage(threshold: codecovThreshold)
-            }
+                stage('Pre-commit checks') {
+                    withStatusContext.custom('pre-commit') {
+                        sh "${pipelineVars.userPath}/pipenv run pre-commit run --all-files"
+                    }
+                }
 
-            archiveArtifacts "app.log"
-            archiveArtifacts "README.md"
-            archiveArtifacts "htmlcov/*"
+                stage('Unit Test') {
+                    jUnitFile = 'junit.xml'
+
+                    withStatusContext.unitTest {
+                        sh "${pipelineVars.userPath}/pipenv run python -m pytest --cov=. --junitxml=${jUnitFile} --cov-report html -sv"
+                    }
+
+                    junit jUnitFile
+                    archiveArtifacts jUnitFile
+                    archiveArtifacts "htmlcov/*"
+                }
+
+                stage('Code coverage') {
+                    checkCoverage(threshold: 80)
+                }
+
+            }
         }
     }
 }
